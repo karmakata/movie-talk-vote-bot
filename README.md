@@ -1,2 +1,3 @@
-# movie-talk-vote-bot
-#movie-talk - VoteBot &lt;3
+# Movie Talk VoteBot &lt;3
+
+Brought to you by!!! ------> Anny
