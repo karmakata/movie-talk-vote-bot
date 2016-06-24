@@ -1,11 +1,13 @@
 var irc = require('slate-irc');
 var net = require('net');
+var fs = require('fs');
+var moment = require('moment');
 
 var HOST = 'localhost';
 var PORT = 6667;
-var PASS = 'SUPERPASS';
+var PASS = 'UTCONLY';
 var NICK = 'MovieVote';
-var IDPW = 'MovieVotePass';
+var IDPW = 'MovieVoterPunkyPunk';
 var CHAN = '#movie-talk';
 
 var votes = {};
@@ -14,7 +16,9 @@ var voted = [];
 
 var commandlist = {
   "!help": "Show this message.",
+  "!lori": "When was lori's last message? :P",
   "!pleasetellthem": "Please, tell them :3.",
+  "!source": "I'll tell you where my source code is.",
   "!topic": "Show this channel's topic.",
   "!totalvotes": "Show current \x02Global\x0f votes.",
   "!unvote": "Recover your votes.",
@@ -135,6 +139,14 @@ client.on('message', function (msg) {
         case '!topic':
           info = 'Not working atm sry thx\x0313 <3';
           break;
+        case '!lori':
+          fs.readFile('lori-timestamp.log', function (err, data) {
+            if (err) {
+              console.error('There\'s no such a file.');
+            }
+            client.send(msg.to, data.toString());
+          });
+          break;
         case '!help':
           client.send(msg.to, '========= HELP =========');
 
@@ -144,14 +156,28 @@ client.on('message', function (msg) {
 
           client.send(msg.to, '======= END HELP =======');
           break;
+        case '!source':
+          info = '\x02https://github.com/karmakata/movie-talk-vote-bot\x034 <3';
+          break;
         case '!pleasetellthem':
           info = '\x02> Daily reminder that ' + msg.from + ' is a plebe.';
           break;
         default: info = 'Sorry ' + msg.from + ', I don\'t have that fucking command thx <3';
           break;
       }
-
-      client.send(msg.to, info);
+      if (info) {
+        client.send(msg.to, info);
+      }
+    } else {
+      if (msg.from == 'lorimeyers') {
+        fs.writeFile('lori-timestamp.log', moment.utc().format('MMMM Do HH:mm:ss'), function (err) {
+          if (err) {
+            console.error('There was an error trying to save this file.');
+            return;
+          }
+          console.log('File saved!');
+        });
+      }
     }
   } else {
     client.send(msg.from, 'Please, vote publicly. Thanks <3');
