@@ -5,14 +5,19 @@ var moment = require('moment');
 
 var HOST = 'localhost';
 var PORT = 6667;
-var PASS = 'YourPassHere';
+var PASS = 'SuperSecretPassHere';
 var NICK = 'MovieVote';
-var IDPW = 'MovieVoteBotPass';
+var IDPW = 'MovieVotePass';
 var CHAN = '#movie-talk';
 
-var votes = {};
+var votes = {}, votes_0 = '';
+var voted = [], voted_0 = '';
 
-var voted = [];
+var logFolder = {
+  "votes": "votes.json",
+  "voted": "voted.json",
+  "lori": "lori-timestamp.log"
+};
 
 var commandlist = {
   "!help": "Show this message.",
@@ -27,18 +32,14 @@ var commandlist = {
   "!voteclean": "Clean current poll."
 };
 
+var stringify = JSON.stringify;
+
 var stream = net.connect({
   host: HOST,
   port: PORT
 });
 
 var client = irc(stream);
-
-function logger () {
-  return function (irc) {
-    irc.stream.pipe(process.stdout);
-  }
-}
 
 function cleanArray(arr) {
   var i = 0;
@@ -49,6 +50,33 @@ function cleanArray(arr) {
     }
   }
   return arr;
+}
+
+function syncVotes(file, data, data_0, errmsg) {
+  var dataString = stringify(data);
+  fs.writeFile(file, dataString, function (err) {
+    if (err) {
+      console.error(errmsg);
+      return;
+    }
+    data_0 = dataString;
+  });
+}
+
+function syncVotesNow() {
+  if (stringify(votes) != votes_0) {
+    syncVotes(logFolder.votes, votes, votes_0, 'Couldn\'t save votes :/.');
+  }
+
+  if (stringify(voted) != voted_0) {
+    syncVotes(logFolder.voted, voted, voted_0, 'Couldn\'t save the ones who voted :(.');
+  }
+}
+
+function logger () {
+  return function (irc) {
+    irc.stream.pipe(process.stdout);
+  }
 }
 
 client.use(logger());
@@ -68,6 +96,29 @@ setTimeout(function () {
 
 
 }, 4000);
+
+setInterval(function () {
+  syncVotesNow();
+}, (1 * 60 * 1000));
+
+// Log File Debugger
+setInterval(function () {
+  fs.readFile(logFolder.votes, function (err, data) {
+    if (err) {
+      console.error(err);
+      return;
+    }
+    console.log(data.toString());
+  });
+
+  fs.readFile(logFolder.voted, function (err, data) {
+    if (err) {
+      console.error(err);
+      return;
+    }
+    console.log(data.toString());
+  });
+}, (30 * 1000));
 
 client.on('message', function (msg) {
   if (msg.to[0] == '#') {
@@ -140,7 +191,7 @@ client.on('message', function (msg) {
           info = 'Not working atm sry thx\x0313 <3';
           break;
         case '!lori':
-          fs.readFile('lori-timestamp.log', function (err, data) {
+          fs.readFile(logFolder.lori, function (err, data) {
             if (err) {
               console.error('There\'s no such a file.');
             }
@@ -170,7 +221,7 @@ client.on('message', function (msg) {
       }
     } else {
       if (msg.from == 'lorimeyers') {
-        fs.writeFile('lori-timestamp.log', moment.utc().format('MMMM Do HH:mm:ss'), function (err) {
+        fs.writeFile(logFolder.lori, moment.utc().format('MMMM Do HH:mm:ss'), function (err) {
           if (err) {
             console.error('There was an error trying to save this file.');
             return;
