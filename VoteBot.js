@@ -10,13 +10,23 @@ var NICK = 'MovieVote';
 var IDPW = 'MovieVotePass';
 var CHAN = '#movie-talk';
 
+var PREFIX = '!';
+var BOTADM = 'anakata';
+
 var votes = {}, votes_0 = '';
 var voted = [], voted_0 = '';
 
-var logFolder = {
+var logJournal = {
   "votes": "votes.json",
   "voted": "voted.json",
-  "lori": "lori-timestamp.log"
+  "lori": "lori-timestamp.log",
+  "load": function (entry) {
+    return JSON.parse(fs.readFileSync(entry));
+  },
+  "recover": function () {
+    votes = this.load(this.votes);
+    voted = this.load(this.voted);
+  }
 };
 
 var commandlist = {
@@ -29,10 +39,14 @@ var commandlist = {
   "!unvote": "Recover your votes.",
   "!vote <something>": "Vote for \x02something\x0f.",
   "!votes <something>": "Show current votes for \x02something\x0f.",
-  "!voteclean": "Clean current poll."
+  "!voteclean": "Clean current poll.",
+  "!savejournal": "\x034ADMIN\x0f Update Journal files.",
+  "!loadjournal": "\x034ADMIN\x0f Reload Journal files."
 };
 
 var stringify = JSON.stringify;
+
+logJournal.recover();
 
 var stream = net.connect({
   host: HOST,
@@ -65,11 +79,11 @@ function syncVotes(file, data, data_0, errmsg) {
 
 function syncVotesNow() {
   if (stringify(votes) != votes_0) {
-    syncVotes(logFolder.votes, votes, votes_0, 'Couldn\'t save votes :/.');
+    syncVotes(logJournal.votes, votes, votes_0, 'Couldn\'t save votes :/.');
   }
 
   if (stringify(voted) != voted_0) {
-    syncVotes(logFolder.voted, voted, voted_0, 'Couldn\'t save the ones who voted :(.');
+    syncVotes(logJournal.voted, voted, voted_0, 'Couldn\'t save the ones who voted :(.');
   }
 }
 
@@ -99,41 +113,23 @@ setTimeout(function () {
 
 setInterval(function () {
   syncVotesNow();
-}, (1 * 60 * 1000));
-
-// Log File Debugger
-setInterval(function () {
-  fs.readFile(logFolder.votes, function (err, data) {
-    if (err) {
-      console.error(err);
-      return;
-    }
-    console.log(data.toString());
-  });
-
-  fs.readFile(logFolder.voted, function (err, data) {
-    if (err) {
-      console.error(err);
-      return;
-    }
-    console.log(data.toString());
-  });
-}, (30 * 1000));
+}, (10 * 60 * 1000));
 
 client.on('message', function (msg) {
   if (msg.to[0] == '#') {
     var info = '';
 
-    if (msg.message[0] == '!') {
+    if (msg.message[0] == PREFIX) {
       switch (msg.message.split(' ')[0]) {
-        case '!vote':
+        case PREFIX+'vote':
+          var username = msg.hostmask.username;
           var payload = msg.message.substr(6);
           votes[payload] = votes[payload] || [];
 
-          if (voted.indexOf(msg.from) == -1) {
-            if (votes[payload].indexOf(msg.from) == -1) {
-              votes[payload].push(msg.from);
-              voted.push(msg.from);
+          if (voted.indexOf(username) == -1) {
+            if (votes[payload].indexOf(username) == -1) {
+              votes[payload].push(username);
+              voted.push(username);
               info = msg.from + ' voted for ' + payload;
             } else {
               info = msg.from + ' already voted for ' + payload;
@@ -142,13 +138,13 @@ client.on('message', function (msg) {
             info = 'Sorry ' + msg.from + ', but you consumed your votes. Now it\'s time to regret it :3\x0313 <3';
           }
           break;
-        case '!votes':
+        case PREFIX+'votes':
           var payload = msg.message.substr(7);
           var totalvotes = votes[payload] ? votes[payload].length : 0;
 
           info = 'Total votes for ' + payload + ' -> ' + totalvotes;
           break;
-        case '!totalvotes':
+        case PREFIX+'totalvotes':
           var totalvotes = 0;
           var movies = [];
 
@@ -165,40 +161,47 @@ client.on('message', function (msg) {
 
           info = 'Global -> ' + totalvotes;
           break;
-        case '!cleanvotes':
+        case PREFIX+'cleanvotes':
           votes = {};
           voted = [];
 
           info = 'Votes cleaned.';
           break;
-        case '!unvote':
-          delete voted[voted.indexOf(msg.from)];
-          for (var movie in votes) {
-            var index = votes[movie].indexOf(msg.from);
+        case PREFIX+'unvote':
+          var username = msg.hostmask.username;
+          var index = voted.indexOf(username);
 
-            if (index != -1) {
-              delete votes[movie][index];
-              cleanArray(votes[movie]);
-              if (!votes[movie].length) {
-                delete votes[movie];
+          if (index != -1) {
+            delete voted[index];
+            for (var movie in votes) {
+              var index = votes[movie].indexOf(username);
+
+              if (index != -1) {
+                delete votes[movie][index];
+                cleanArray(votes[movie]);
+                if (!votes[movie].length) {
+                  delete votes[movie];
+                }
               }
             }
+            cleanArray(voted);
+            info = msg.from + ', you\'ve recovered your votes. Have fun!';
+          } else {
+            info = msg.from + ', you already have your votes.';
           }
-          cleanArray(voted);
-          info = msg.from + ', you\'ve recovered your votes. Have fun!';
         break;
-        case '!topic':
+        case PREFIX+'topic':
           info = 'Not working atm sry thx\x0313 <3';
           break;
-        case '!lori':
-          fs.readFile(logFolder.lori, function (err, data) {
+        case PREFIX+'lori':
+          fs.readFile(logJournal.lori, function (err, data) {
             if (err) {
               console.error('There\'s no such a file.');
             }
             client.send(msg.to, data.toString());
           });
           break;
-        case '!help':
+        case PREFIX+'help':
           client.send(msg.to, '========= HELP =========');
 
           for (var command in commandlist) {
@@ -207,11 +210,31 @@ client.on('message', function (msg) {
 
           client.send(msg.to, '======= END HELP =======');
           break;
-        case '!source':
+        case PREFIX+'source':
           info = '\x02https://github.com/karmakata/movie-talk-vote-bot\x034 <3';
           break;
-        case '!pleasetellthem':
+        case PREFIX+'pleasetellthem':
           info = '\x02> Daily reminder that ' + msg.from + ' is a plebe.';
+          break;
+        case PREFIX+'savejournal':
+          var username = msg.hostmask.username;
+
+          if (username === BOTADM) {
+            syncVotesNow();
+            info = '\x02INFO:\x0310 Vote Journal Updated.';
+          } else {
+            info = '\x034' + msg.from + ', you\'re not a bot admin';
+          }
+          break;
+        case PREFIX+'loadjournal':
+          var username = msg.hostmask.username;
+
+          if (username === BOTADM) {
+            logJournal.recover();
+            info = '\x02INFO\x0310 Vote Journal reloaded.'
+          } else {
+            info = '\x034' + msg.from + ', you\'re not a bot admin.';
+          }
           break;
         default: info = 'Sorry ' + msg.from + ', I don\'t have that fucking command thx <3';
           break;
@@ -221,7 +244,7 @@ client.on('message', function (msg) {
       }
     } else {
       if (msg.from == 'lorimeyers') {
-        fs.writeFile(logFolder.lori, moment.utc().format('MMMM Do HH:mm:ss'), function (err) {
+        fs.writeFile(logJournal.lori, moment.utc().format('MMMM Do HH:mm:ss'), function (err) {
           if (err) {
             console.error('There was an error trying to save this file.');
             return;
